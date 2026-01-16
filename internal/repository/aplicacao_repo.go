@@ -154,3 +154,48 @@ func (r *AplicacaoRepo) BuscarPorID(ctx context.Context, id int) (*model.Aplicac
 
 	return &a, nil
 }
+
+// GetAllVehicles returns all vehicles from the database for scraping
+func (r *AplicacaoRepo) GetAllVehicles(ctx context.Context) ([]model.Aplicacao, error) {
+	query := `
+		SELECT
+			a."CodigoAplicacao",
+			a."CodigoFabricante",
+			f."DescricaoFabricante" as fabricante,
+			a."DescricaoAplicacao" as modelo,
+			COALESCE(a."ComplementoAplicacao2", '') as periodo,
+			COALESCE(a."ComplementoAplicacao3", '') as motor
+		FROM "APLICACAO" a
+		JOIN "FABRICANTE" f ON a."CodigoFabricante" = f."CodigoFabricante"
+		WHERE f."FlagAplicacao" = 1
+		ORDER BY a."CodigoAplicacao"
+	`
+
+	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query vehicles: %w", err)
+	}
+	defer rows.Close()
+
+	var vehicles []model.Aplicacao
+	for rows.Next() {
+		var v model.Aplicacao
+		if err := rows.Scan(
+			&v.CodigoAplicacao,
+			&v.CodigoFabricante,
+			&v.Fabricante,
+			&v.Modelo,
+			&v.Periodo,
+			&v.Motor,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan vehicle: %w", err)
+		}
+		vehicles = append(vehicles, v)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating vehicles: %w", err)
+	}
+
+	return vehicles, nil
+}
