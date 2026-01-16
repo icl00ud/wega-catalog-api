@@ -37,14 +37,14 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 			"Norma" VARCHAR(100),
 			"Recomendacao" TEXT,
 			"Observacao" TEXT,
-			"Fonte" VARCHAR(50) NOT NULL,
-			"MotulVehicleTypeID" VARCHAR(50),
+			"Fonte" VARCHAR(50) NOT NULL DEFAULT 'MotulAPI',
+			"MotulVehicleTypeId" VARCHAR(100),
 			"MatchConfidence" DECIMAL(5,2),
 			"CriadoEm" TIMESTAMP NOT NULL DEFAULT NOW(),
 			"AtualizadoEm" TIMESTAMP NOT NULL DEFAULT NOW(),
 			CONSTRAINT "fk_especificacao_aplicacao"
 				FOREIGN KEY ("CodigoAplicacao")
-				REFERENCES "APLICACAO"("Codigo")
+				REFERENCES "APLICACAO"("CodigoAplicacao")
 				ON DELETE CASCADE
 		)
 	`)
