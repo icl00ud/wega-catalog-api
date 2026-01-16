@@ -29,7 +29,7 @@ func (r *EspecificacaoRepository) Insert(ctx context.Context, spec *model.Especi
 			"Recomendacao",
 			"Observacao",
 			"Fonte",
-			"MotulVehicleTypeID",
+			"MotulVehicleTypeId",
 			"MatchConfidence"
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING "ID", "CriadoEm", "AtualizadoEm"
@@ -75,7 +75,7 @@ func (r *EspecificacaoRepository) InsertBatch(ctx context.Context, specs []model
 			"Recomendacao",
 			"Observacao",
 			"Fonte",
-			"MotulVehicleTypeID",
+			"MotulVehicleTypeId",
 			"MatchConfidence"
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING "ID", "CriadoEm", "AtualizadoEm"
