@@ -1,0 +1,47 @@
+services:
+  wega-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wega-catalog-api
+    restart: unless-stopped
+    expose:
+      - '8080'
+    environment:
+      - DB_HOST=${DB_HOST:-o8cok8s4cg408cos4k0sowos}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-wega}
+      - DB_USER=${DB_USER:-wega}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_SSLMODE=${DB_SSLMODE:-disable}
+      - API_PORT=8080
+      - LOG_LEVEL=info
+    networks:
+      coolify:
+        aliases:
+          - wega-catalog-api
+    labels:
+      - traefik.enable=true
+      - traefik.http.middlewares.gzip.compress=true
+      - traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https
+      # HTTP -> HTTPS redirect
+      - traefik.http.routers.wega-api-http.entryPoints=http
+      - traefik.http.routers.wega-api-http.middlewares=redirect-to-https
+      - 'traefik.http.routers.wega-api-http.rule=Host(`wega-api.velure.app.br`)'
+      # HTTPS
+      - traefik.http.routers.wega-api-https.entryPoints=https
+      - traefik.http.routers.wega-api-https.middlewares=gzip
+      - 'traefik.http.routers.wega-api-https.rule=Host(`wega-api.velure.app.br`)'
+      - traefik.http.routers.wega-api-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.wega-api-https.tls=true
+      - traefik.http.services.wega-api.loadbalancer.server.port=8080
+      # Coolify labels
+      - coolify.managed=true
+      - coolify.type=application
+      - coolify.name=wega-catalog-api
+
+networks:
+  coolify:
+    external: true
+    name: coolify
+    attachable: true
