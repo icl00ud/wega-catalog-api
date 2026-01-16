@@ -154,9 +154,7 @@ func (s *ScraperService) Run(ctx context.Context) error {
 		} else {
 			s.logger.Info("HTTP monitoring started", "port", s.config.HTTPMonitorPort)
 			defer func() {
-				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				s.monitor.Stop(shutdownCtx)
+				s.monitor.Stop(context.Background())
 			}()
 		}
 	}
