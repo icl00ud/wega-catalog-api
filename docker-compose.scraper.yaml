@@ -25,14 +25,17 @@ services:
     # Connect to host network to reach PostgreSQL on localhost:2345
     network_mode: host
     # Override default CMD for VM-specific settings
+    # Pay-as-you-go: 300 RPM, 200ms rate limit, 3 workers for faster processing
     command:
       - "--db-host=localhost"
       - "--db-port=2345"
       - "--checkpoint-file=/data/checkpoint.json"
       - "--catalog-cache=/data/motul_catalog.json"
       - "--log-level=info"
-      - "--rate-limit=2000"
-      - "--workers=1"
+      - "--groq-rpm=300"
+      - "--rate-limit=200"
+      - "--workers=3"
+      - "--checkpoint-every=100"
     # Healthcheck based on checkpoint file activity
     healthcheck:
       test: ["CMD", "sh", "-c", "test -f /data/checkpoint.json && test $$(find /data/checkpoint.json -mmin -10 | wc -l) -gt 0"]
