@@ -5,6 +5,8 @@
 *.so
 *.dylib
 wega-api
+motul-scraper
+motul-scraper-linux
 
 # Test binary
 *.test
@@ -31,6 +33,9 @@ go.work
 
 # Logs
 *.log
+
+# Scraper state
+*checkpoint*.json
 
 # OS
 .DS_Store
