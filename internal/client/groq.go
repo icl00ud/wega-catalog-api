@@ -388,16 +388,13 @@ func (c *GroqClient) NormalizeVehicle(ctx context.Context, wegaVehicle string, m
 		optionsList += fmt.Sprintf("%d.%s ", i+1, opt)
 	}
 
-	// OPTIMIZED PROMPT with engine type differentiation
-	// Critical: distinguish turbo vs naturally aspirated engines
-	prompt := fmt.Sprintf(`Match vehicle to option. Rules:
--TURBO(Turbo/TSI/T200/THP)→TURBO option
--ASPIRATED(Firefly/no turbo)→NON-TURBO option
--Match power:75cv≠130cv
-Vehicle:%s
-Options:%s
-Answer:%d=`,
-		wegaVehicle, strings.TrimSpace(optionsList), len(motulOptions))
+	// CRITICAL: Prompt must force LLM to output ONLY a number
+	// The previous prompt was too complex and LLM responded with explanations
+	// This version uses a simple Q&A format that works better with Llama 3.1
+	prompt := fmt.Sprintf(`Q: Which option best matches "%s"?
+IMPORTANT: If vehicle has NO turbo keywords (Turbo/TSI/T200/THP/130cv), choose NON-turbo option.
+%s
+A:`, wegaVehicle, strings.TrimSpace(optionsList))
 
 	// Rate limit
 	if err := c.rateLimiter.Wait(ctx); err != nil {
@@ -412,13 +409,23 @@ Answer:%d=`,
 
 	// Parse the response number
 	response = strings.TrimSpace(response)
+
+	// Try to extract first digit from response
 	var optionNum int
-	if _, err := fmt.Sscanf(response, "%d", &optionNum); err != nil {
-		c.logger.Warn("failed to parse LLM response, using first option",
+	for _, char := range response {
+		if char >= '1' && char <= '9' {
+			optionNum = int(char - '0')
+			break
+		}
+	}
+
+	if optionNum == 0 {
+		// LLM didn't return a valid number - use smart fallback based on engine type
+		c.logger.Warn("LLM response not a number, using smart fallback",
 			"response", response,
 			"wega_vehicle", wegaVehicle,
 		)
-		return motulOptions[0], nil
+		return c.smartFallback(wegaVehicle, motulOptions), nil
 	}
 
 	// Validate option number
@@ -426,14 +433,58 @@ Answer:%d=`,
 		if optionNum == 0 {
 			return "", fmt.Errorf("LLM indicated no match")
 		}
-		c.logger.Warn("invalid option number from LLM, using first option",
+		c.logger.Warn("invalid option number from LLM, using smart fallback",
 			"option_num", optionNum,
 			"total_options", len(motulOptions),
 		)
-		return motulOptions[0], nil
+		return c.smartFallback(wegaVehicle, motulOptions), nil
 	}
 
 	return motulOptions[optionNum-1], nil
+}
+
+// smartFallback selects the best option based on turbo/aspirated engine detection
+// This is used when the LLM fails to return a valid number
+func (c *GroqClient) smartFallback(wegaVehicle string, motulOptions []string) string {
+	wegaLower := strings.ToLower(wegaVehicle)
+
+	// Check if Wega vehicle is turbo
+	turboKeywords := []string{"turbo", "tsi", "tfsi", "t200", "thp", "130cv", "130 cv", "125cv", "125 cv"}
+	wegaIsTurbo := false
+	for _, kw := range turboKeywords {
+		if strings.Contains(wegaLower, kw) {
+			wegaIsTurbo = true
+			break
+		}
+	}
+
+	// Find matching option based on turbo status
+	for _, opt := range motulOptions {
+		optLower := strings.ToLower(opt)
+		optIsTurbo := false
+		for _, kw := range turboKeywords {
+			if strings.Contains(optLower, kw) {
+				optIsTurbo = true
+				break
+			}
+		}
+
+		// Match turbo with turbo, non-turbo with non-turbo
+		if wegaIsTurbo == optIsTurbo {
+			c.logger.Info("smart fallback matched by engine type",
+				"wega", wegaVehicle,
+				"matched", opt,
+				"is_turbo", wegaIsTurbo,
+			)
+			return opt
+		}
+	}
+
+	// If no match by engine type, return first option
+	c.logger.Warn("smart fallback: no engine type match, using first option",
+		"wega", wegaVehicle,
+	)
+	return motulOptions[0]
 }
 
 // NormalizeVehicleBatch processes multiple vehicles in a single LLM call
