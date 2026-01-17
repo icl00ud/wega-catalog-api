@@ -36,6 +36,7 @@ services:
       - "--rate-limit=200"
       - "--workers=3"
       - "--checkpoint-every=100"
+      - "--resume-from=420800"
     # Healthcheck based on checkpoint file activity
     healthcheck:
       test: ["CMD", "sh", "-c", "test -f /data/checkpoint.json && test $$(find /data/checkpoint.json -mmin -10 | wc -l) -gt 0"]
