@@ -388,9 +388,16 @@ func (c *GroqClient) NormalizeVehicle(ctx context.Context, wegaVehicle string, m
 		optionsList += fmt.Sprintf("%d.%s ", i+1, opt)
 	}
 
-	// OPTIMIZED PROMPT: ~150 tokens vs ~500 tokens before
-	// Simple, direct instruction that LLM can follow
-	prompt := fmt.Sprintf("Match vehicle to option number.\nVehicle:%s\nOptions:%s\nReply with number only (1-%d) or 0 if none match.",
+	// OPTIMIZED PROMPT with engine type differentiation
+	// Critical: distinguish turbo vs naturally aspirated engines
+	prompt := fmt.Sprintf(`Match vehicle to BEST option. CRITICAL RULES:
+1. TURBO engines (Turbo/TSI/TFSI/T200/THP) must match TURBO options
+2. ASPIRATED engines (Firefly/naturally aspirated/no turbo mention) must match NON-TURBO options  
+3. Match power (cv/hp) as closely as possible - 75cv≠130cv
+4. Match engine code if present (Firefly, T200, EA211, etc)
+Vehicle:%s
+Options:%s
+Reply ONLY the number (1-%d) or 0 if no good match.`,
 		wegaVehicle, strings.TrimSpace(optionsList), len(motulOptions))
 
 	// Rate limit
