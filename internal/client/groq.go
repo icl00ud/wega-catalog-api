@@ -390,14 +390,13 @@ func (c *GroqClient) NormalizeVehicle(ctx context.Context, wegaVehicle string, m
 
 	// OPTIMIZED PROMPT with engine type differentiation
 	// Critical: distinguish turbo vs naturally aspirated engines
-	prompt := fmt.Sprintf(`Match vehicle to BEST option. CRITICAL RULES:
-1. TURBO engines (Turbo/TSI/TFSI/T200/THP) must match TURBO options
-2. ASPIRATED engines (Firefly/naturally aspirated/no turbo mention) must match NON-TURBO options  
-3. Match power (cv/hp) as closely as possible - 75cv≠130cv
-4. Match engine code if present (Firefly, T200, EA211, etc)
+	prompt := fmt.Sprintf(`Match vehicle to option. Rules:
+-TURBO(Turbo/TSI/T200/THP)→TURBO option
+-ASPIRATED(Firefly/no turbo)→NON-TURBO option
+-Match power:75cv≠130cv
 Vehicle:%s
 Options:%s
-Reply ONLY the number (1-%d) or 0 if no good match.`,
+Answer:%d=`,
 		wegaVehicle, strings.TrimSpace(optionsList), len(motulOptions))
 
 	// Rate limit
@@ -559,8 +558,8 @@ func (c *GroqClient) doRequestWithFailover(ctx context.Context, prompt string) (
 		Messages: []GroqMessage{
 			{Role: "user", Content: prompt},
 		},
-		Temperature: 0.1,
-		MaxTokens:   50, // Increased for batch responses
+		Temperature: 0.0, // Zero temperature for deterministic output
+		MaxTokens:   5,   // Force short response (just a number)
 	}
 
 	reqBody, err := json.Marshal(req)
