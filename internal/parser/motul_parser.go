@@ -37,19 +37,25 @@ func (p *MotulParser) ParseSpecifications(resp *client.SpecificationsResponse) (
 		return nil, fmt.Errorf("nil response")
 	}
 
-	components := resp.PageProps.Components
+	components := resp.Vehicle.Components
 	if len(components) == 0 {
 		return nil, fmt.Errorf("no components in response")
 	}
 
 	specs := []OilSpec{}
 
+	// Convert to interface{} slice for legacy parsing logic
+	var componentsIface []interface{}
+	for _, c := range components {
+		componentsIface = append(componentsIface, c)
+	}
+
 	// Find motor (engine oil) specifications
-	motorSpecs := p.findMotorSpecs(components)
+	motorSpecs := p.findMotorSpecs(componentsIface)
 	specs = append(specs, motorSpecs...)
 
 	// Find transmission oil specifications
-	transmissionSpecs := p.findTransmissionSpecs(components)
+	transmissionSpecs := p.findTransmissionSpecs(componentsIface)
 	specs = append(specs, transmissionSpecs...)
 
 	return specs, nil

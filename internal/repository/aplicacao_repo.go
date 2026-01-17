@@ -199,3 +199,34 @@ func (r *AplicacaoRepo) GetAllVehicles(ctx context.Context) ([]model.Aplicacao, 
 
 	return vehicles, nil
 }
+
+// GetVehicleByID returns a single vehicle by ID for scraping
+func (r *AplicacaoRepo) GetVehicleByID(ctx context.Context, id int) (*model.Aplicacao, error) {
+	query := `
+		SELECT
+			a."CodigoAplicacao",
+			a."CodigoFabricante",
+			f."DescricaoFabricante" as fabricante,
+			a."DescricaoAplicacao" as modelo,
+			COALESCE(a."ComplementoAplicacao2", '') as periodo,
+			COALESCE(a."ComplementoAplicacao3", '') as motor
+		FROM "APLICACAO" a
+		JOIN "FABRICANTE" f ON a."CodigoFabricante" = f."CodigoFabricante"
+		WHERE a."CodigoAplicacao" = $1
+	`
+
+	var v model.Aplicacao
+	err := r.db.QueryRow(ctx, query, id).Scan(
+		&v.CodigoAplicacao,
+		&v.CodigoFabricante,
+		&v.Fabricante,
+		&v.Modelo,
+		&v.Periodo,
+		&v.Motor,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get vehicle by ID: %w", err)
+	}
+
+	return &v, nil
+}

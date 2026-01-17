@@ -49,19 +49,37 @@ type VehicleTypesResponse struct {
 	Types []VehicleType `json:"types"`
 }
 
-// SpecificationsResponse is the complex Motul recommendations JSON
+// SpecificationsResponse is the Motul recommendations API response
 type SpecificationsResponse struct {
-	PageProps struct {
-		Vehicle struct {
-			CategoryID string `json:"categoryId"`
-			Brand      string `json:"brand"`
-			Type       string `json:"type"`
-			Model      string `json:"model"`
-			StartYear  string `json:"startYear"`
-			EndYear    string `json:"endYear"`
-		} `json:"vehicle"`
-		Components []interface{} `json:"components"`
-	} `json:"pageProps"`
+	Vehicle struct {
+		CategoryID string      `json:"categoryId"`
+		Brand      string      `json:"brand"`
+		Type       string      `json:"type"`
+		Model      string      `json:"model"`
+		StartYear  string      `json:"startYear"`
+		EndYear    string      `json:"endYear"`
+		Components []Component `json:"components"` // Components are nested inside vehicle
+	} `json:"vehicle"`
+}
+
+// Component represents a vehicle component with oil recommendations
+type Component struct {
+	Category struct {
+		Code string `json:"code"`
+		Name string `json:"name"`
+	} `json:"category"`
+	Capacities []struct {
+		Label string `json:"label"`
+	} `json:"capacities"`
+	Recommendations []struct {
+		Conditions struct {
+			Usage   string `json:"usage"`
+			Mileage string `json:"mileage"`
+		} `json:"conditions"`
+		Products []struct {
+			Name string `json:"name"`
+		} `json:"products"`
+	} `json:"recommendations"`
 }
 
 // MotulClient handles communication with Motul API
@@ -203,9 +221,8 @@ func (c *MotulClient) GetVehicleTypes(ctx context.Context, modelID string) ([]Ve
 
 // GetSpecifications fetches oil specifications for a vehicle type
 func (c *MotulClient) GetSpecifications(ctx context.Context, vehicleTypeID string) (*SpecificationsResponse, error) {
-	// Build ID needs URL encoding
-	url := fmt.Sprintf("%s/_next/data/ErAVpxULBQDBZ6fA5O0c4/%s/lubricants/recommendations/%s.json?vehicleTypeId=%s",
-		motulWebBase, locale, vehicleTypeID, vehicleTypeID)
+	url := fmt.Sprintf("%s/recommendations?vehicleTypeId=%s&locale=%s&BU=%s",
+		motulAPIBase, vehicleTypeID, locale, businessUnit)
 
 	body, err := c.fetchWithRetry(ctx, url)
 	if err != nil {

@@ -1,0 +1,45 @@
+# Build stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+
+# Instalar certificados e git
+RUN apk add --no-cache ca-certificates git
+
+# Copiar go.mod e go.sum primeiro (cache de dependencias)
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copiar codigo fonte
+COPY . .
+
+# Build com flags de otimizacao
+RUN CGO_ENABLED=0 go build \
+    -ldflags="-w -s" \
+    -o /motul-scraper \
+    ./cmd/motul-scraper
+
+# Runtime stage
+FROM alpine:3.19
+
+WORKDIR /app
+
+# Certificados SSL e timezone
+RUN apk add --no-cache ca-certificates tzdata
+
+# Copiar binario
+COPY --from=builder /motul-scraper .
+
+# Criar diretorio para dados persistentes
+RUN mkdir -p /data && chown 1000:1000 /data
+
+# Usuario nao-root
+RUN adduser -D -u 1000 appuser
+USER appuser
+
+# Volume para checkpoint e cache
+VOLUME ["/data"]
+
+# Executar
+ENTRYPOINT ["./motul-scraper"]
+CMD ["--checkpoint-file=/data/checkpoint.json", "--catalog-cache=/data/motul_catalog.json"]

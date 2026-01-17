@@ -9,6 +9,21 @@ import (
 
 // RunMigrations executes all database migrations
 func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	// Create ESPECIFICACAO_TECNICA table if not exists
+	if err := createEspecificacaoTecnicaTable(ctx, pool); err != nil {
+		return err
+	}
+
+	// Create SCRAPER_FALHAS table for retry tracking
+	if err := createScraperFalhasTable(ctx, pool); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// createEspecificacaoTecnicaTable creates the specifications table
+func createEspecificacaoTecnicaTable(ctx context.Context, pool *pgxpool.Pool) error {
 	// Check if table exists
 	var exists bool
 	err := pool.QueryRow(ctx, `
@@ -75,6 +90,78 @@ func RunMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to create idx_especificacao_fonte: %w", err)
+	}
+
+	return nil
+}
+
+// createScraperFalhasTable creates the table for tracking failed scraper attempts
+func createScraperFalhasTable(ctx context.Context, pool *pgxpool.Pool) error {
+	// Check if table exists
+	var exists bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables
+			WHERE table_schema = 'public'
+			AND table_name = 'SCRAPER_FALHAS'
+		)
+	`).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check if SCRAPER_FALHAS table exists: %w", err)
+	}
+
+	if exists {
+		return nil
+	}
+
+	// Create table
+	_, err = pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS "SCRAPER_FALHAS" (
+			"ID" SERIAL PRIMARY KEY,
+			"CodigoAplicacao" INTEGER NOT NULL,
+			"TipoErro" VARCHAR(100) NOT NULL,
+			"MensagemErro" TEXT,
+			"Tentativas" INTEGER NOT NULL DEFAULT 1,
+			"UltimaTentativa" TIMESTAMP NOT NULL DEFAULT NOW(),
+			"ProximaTentativa" TIMESTAMP,
+			"Resolvido" BOOLEAN NOT NULL DEFAULT FALSE,
+			"ResolvidoEm" TIMESTAMP,
+			"CriadoEm" TIMESTAMP NOT NULL DEFAULT NOW(),
+			CONSTRAINT "fk_falha_aplicacao"
+				FOREIGN KEY ("CodigoAplicacao")
+				REFERENCES "APLICACAO"("CodigoAplicacao")
+				ON DELETE CASCADE,
+			CONSTRAINT "uq_falha_aplicacao"
+				UNIQUE ("CodigoAplicacao")
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create SCRAPER_FALHAS table: %w", err)
+	}
+
+	// Create indexes
+	_, err = pool.Exec(ctx, `
+		CREATE INDEX IF NOT EXISTS "idx_falhas_resolvido"
+		ON "SCRAPER_FALHAS"("Resolvido") WHERE "Resolvido" = FALSE
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create idx_falhas_resolvido: %w", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		CREATE INDEX IF NOT EXISTS "idx_falhas_proxima_tentativa"
+		ON "SCRAPER_FALHAS"("ProximaTentativa") WHERE "Resolvido" = FALSE
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create idx_falhas_proxima_tentativa: %w", err)
+	}
+
+	_, err = pool.Exec(ctx, `
+		CREATE INDEX IF NOT EXISTS "idx_falhas_tipo"
+		ON "SCRAPER_FALHAS"("TipoErro")
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create idx_falhas_tipo: %w", err)
 	}
 
 	return nil

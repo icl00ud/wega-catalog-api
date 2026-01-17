@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -13,8 +13,8 @@ RUN go mod download
 # Copiar codigo fonte
 COPY . .
 
-# Build com flags de otimizacao
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+# Build com flags de otimizacao (usa arquitetura nativa do builder)
+RUN CGO_ENABLED=0 go build \
     -ldflags="-w -s" \
     -o /wega-api \
     ./cmd/server
