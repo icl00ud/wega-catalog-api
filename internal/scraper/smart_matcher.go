@@ -10,12 +10,12 @@ import (
 	"wega-catalog-api/internal/client"
 )
 
-// SmartMatcher uses pre-loaded catalog and Groq LLM for intelligent matching
+// SmartMatcher uses pre-loaded catalog and LLM for intelligent matching
 type SmartMatcher struct {
-	catalog   *CatalogLoader
-	groq      *client.GroqClient
-	motul     *client.MotulClient
-	logger    *slog.Logger
+	catalog *CatalogLoader
+	llm     client.LLMClient // Supports both Groq and Ollama
+	motul   *client.MotulClient
+	logger  *slog.Logger
 
 	// Caches to avoid repeated LLM calls
 	brandCache sync.Map // wegaBrand -> motulBrandName
@@ -25,23 +25,23 @@ type SmartMatcher struct {
 
 // MatchResult represents a successful match
 type SmartMatchResult struct {
-	VehicleType    CatalogVehicleType
-	Confidence     float64
-	MatchMethod    string // "exact", "fuzzy", "llm"
-	MotulBrand     string
-	MotulModel     string
+	VehicleType CatalogVehicleType
+	Confidence  float64
+	MatchMethod string // "exact", "fuzzy", "llm"
+	MotulBrand  string
+	MotulModel  string
 }
 
 // NewSmartMatcher creates a new smart matcher
 func NewSmartMatcher(
 	catalog *CatalogLoader,
-	groq *client.GroqClient,
+	llm client.LLMClient,
 	motul *client.MotulClient,
 	logger *slog.Logger,
 ) *SmartMatcher {
 	return &SmartMatcher{
 		catalog: catalog,
-		groq:    groq,
+		llm:     llm,
 		motul:   motul,
 		logger:  logger,
 	}
@@ -102,7 +102,7 @@ func (m *SmartMatcher) FindMatch(ctx context.Context, wegaBrand, wegaModel, wega
 		fullDescription = fmt.Sprintf("%s (%d)", fullDescription, year)
 	}
 
-	matchedName, err := m.groq.NormalizeVehicle(ctx, fullDescription, typeNames)
+	matchedName, err := m.llm.NormalizeVehicle(ctx, fullDescription, typeNames)
 	if err != nil {
 		m.logger.Warn("LLM matching failed, using first option",
 			"wega", fullDescription,
@@ -181,7 +181,7 @@ func (m *SmartMatcher) matchBrand(ctx context.Context, wegaBrand string) (string
 		return "", fmt.Errorf("no brands in catalog")
 	}
 
-	matchedBrand, err := m.groq.FindBestBrand(ctx, wegaBrand, brandNames)
+	matchedBrand, err := m.llm.FindBestBrand(ctx, wegaBrand, brandNames)
 	if err != nil {
 		return "", err
 	}
@@ -223,7 +223,7 @@ func (m *SmartMatcher) matchModel(ctx context.Context, motulBrand, wegaModel str
 	}
 
 	// Use LLM to find best match
-	matchedModel, err := m.groq.FindBestModel(ctx, wegaModel, modelNames)
+	matchedModel, err := m.llm.FindBestModel(ctx, wegaModel, modelNames)
 	if err != nil {
 		return "", err
 	}

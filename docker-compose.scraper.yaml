@@ -16,25 +16,32 @@ services:
       - DB_USER=${DB_USER:-wega}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_SSLMODE=${DB_SSLMODE:-disable}
-      # Groq API (supports multiple keys for failover)
-      - GROQ_API_KEYS=${GROQ_API_KEYS}
+      # LLM Provider (ollama or groq)
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      # Ollama settings (local LLM via Tailscale)
+      - OLLAMA_URL=${OLLAMA_URL:-http://100.108.205.53:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
+      # Groq API (fallback, supports multiple keys for failover)
+      - GROQ_API_KEYS=${GROQ_API_KEYS:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
       # Persist checkpoint and catalog cache
       - scraper-data:/data
-    # Connect to host network to reach PostgreSQL on localhost:2345
+    # Connect to host network to reach PostgreSQL on localhost:2345 and Ollama via Tailscale
     network_mode: host
-    # Override default CMD for VM-specific settings
-    # Pay-as-you-go: 300 RPM, 200ms rate limit, 3 workers for faster processing
+    # Using Ollama: faster (150ms vs 400ms), no rate limits, no cost
+    # Rate limit lowered since local inference is fast
     command:
       - "--db-host=localhost"
       - "--db-port=2345"
       - "--checkpoint-file=/data/checkpoint.json"
       - "--catalog-cache=/data/motul_catalog.json"
       - "--log-level=info"
-      - "--groq-rpm=300"
-      - "--rate-limit=200"
-      - "--workers=3"
+      - "--llm-provider=ollama"
+      - "--ollama-url=http://100.108.205.53:11434"
+      - "--ollama-model=llama3.1:8b"
+      - "--rate-limit=100"
+      - "--workers=5"
       - "--checkpoint-every=100"
     # Healthcheck based on checkpoint file activity
     healthcheck:

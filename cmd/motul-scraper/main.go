@@ -28,7 +28,14 @@ func main() {
 		dbPassword = flag.String("db-password", getEnv("DB_PASSWORD", ""), "Database password")
 		dbSSLMode  = flag.String("db-sslmode", getEnv("DB_SSLMODE", "disable"), "Database SSL mode")
 
-		// Groq API flags - supports multiple keys separated by comma for failover
+		// LLM Provider flags
+		llmProvider = flag.String("llm-provider", getEnv("LLM_PROVIDER", "ollama"), "LLM provider: ollama or groq")
+
+		// Ollama flags (local LLM)
+		ollamaURL   = flag.String("ollama-url", getEnv("OLLAMA_URL", "http://100.108.205.53:11434"), "Ollama API URL")
+		ollamaModel = flag.String("ollama-model", getEnv("OLLAMA_MODEL", "llama3.1:8b"), "Ollama model name")
+
+		// Groq API flags (cloud LLM) - supports multiple keys separated by comma for failover
 		groqAPIKeys = flag.String("groq-api-keys", getEnv("GROQ_API_KEYS", getEnv("GROQ_API_KEY", "")), "Groq API keys (comma-separated for failover)")
 		groqRPM     = flag.Int("groq-rpm", 30, "Groq requests per minute per key (free tier: 30)")
 
@@ -55,22 +62,53 @@ func main() {
 		os.Exit(1)
 	}
 
-	if *groqAPIKeys == "" {
-		fmt.Fprintln(os.Stderr, "Error: Groq API key(s) required (use -groq-api-keys or GROQ_API_KEYS env)")
-		fmt.Fprintln(os.Stderr, "Multiple keys can be separated by comma for automatic failover")
-		fmt.Fprintln(os.Stderr, "Get your free API key at: https://console.groq.com/keys")
-		os.Exit(1)
-	}
-
-	// Parse API keys (comma-separated)
-	apiKeys := parseAPIKeys(*groqAPIKeys)
-	if len(apiKeys) == 0 {
-		fmt.Fprintln(os.Stderr, "Error: no valid API keys provided")
-		os.Exit(1)
-	}
-
 	// Setup logger
 	logger := setupLogger(*logLevel)
+
+	// Create LLM client based on provider
+	var llmClient client.LLMClient
+
+	switch strings.ToLower(*llmProvider) {
+	case "ollama":
+		logger.Info("using Ollama LLM provider",
+			"url", *ollamaURL,
+			"model", *ollamaModel,
+		)
+		ollamaClient := client.NewOllamaClient(*ollamaURL, *ollamaModel, logger)
+
+		// Test connection
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := ollamaClient.Ping(ctx); err != nil {
+			logger.Warn("Ollama ping failed, continuing anyway", "error", err)
+		}
+		cancel()
+
+		llmClient = ollamaClient
+
+	case "groq":
+		if *groqAPIKeys == "" {
+			fmt.Fprintln(os.Stderr, "Error: Groq API key(s) required when using groq provider")
+			fmt.Fprintln(os.Stderr, "Use -groq-api-keys or GROQ_API_KEYS env")
+			fmt.Fprintln(os.Stderr, "Get your free API key at: https://console.groq.com/keys")
+			os.Exit(1)
+		}
+
+		apiKeys := parseAPIKeys(*groqAPIKeys)
+		if len(apiKeys) == 0 {
+			fmt.Fprintln(os.Stderr, "Error: no valid API keys provided")
+			os.Exit(1)
+		}
+
+		logger.Info("using Groq LLM provider",
+			"keys_count", len(apiKeys),
+			"rpm", *groqRPM,
+		)
+		llmClient = client.NewGroqClientMultiKey(apiKeys, float64(*groqRPM), logger)
+
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unknown LLM provider: %s (use 'ollama' or 'groq')\n", *llmProvider)
+		os.Exit(1)
+	}
 
 	logger.Info("starting Motul scraper with smart matching",
 		"db_host", *dbHost,
@@ -78,8 +116,7 @@ func main() {
 		"db_name", *dbName,
 		"workers", *workers,
 		"rate_limit_ms", *rateLimitMs,
-		"groq_rpm", *groqRPM,
-		"groq_keys", len(apiKeys),
+		"llm_provider", *llmProvider,
 		"dry_run", *dryRun,
 	)
 
@@ -140,11 +177,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create Groq client for LLM normalization (with multi-key failover support)
-	groqClient := client.NewGroqClientMultiKey(apiKeys, float64(*groqRPM), logger)
-
-	// Create smart matcher
-	smartMatcher := scraper.NewSmartMatcher(catalogLoader, groqClient, motulClient, logger)
+	// Create smart matcher with the selected LLM client
+	smartMatcher := scraper.NewSmartMatcher(catalogLoader, llmClient, motulClient, logger)
 
 	// Create adapter that implements scraper.MotulClient interface
 	motulAdapter := scraper.NewMotulAdapter(smartMatcher, motulClient, logger)
